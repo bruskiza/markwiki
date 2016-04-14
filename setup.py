@@ -29,6 +29,8 @@ if __name__ == '__main__':
         'requests==2.6.0',
         'Whoosh==2.5.6',
         'sh==1.11',
+        'flask-pagedown',
+        'WTForms==1.0.5',
     ]
 
     # Add some developer tools.

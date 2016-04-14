@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% block title %}Create {{ page_path|default('a Wiki', true) }}{% endblock %}
+{% block content %}
+{{ pagedown.include_pagedown() }}
+<style>
+  .flask-pagedown-input {}
+
+  .flask-pagedown-preview {
+    border: 1px dotted black;
+    background-color: #f0f0f0;
+    padding: 1em;
+  }
+</style>
+
+<form action='{{ url_for('make_wiki_from_pagedown') }}' method='POST'>
+<div class='form-group'>
+  <label for='page_path'>Wiki</label>
+  <input type='text' name='page_path' class='form-control'
+  {% if page_path %}
+    value='{{ page_path }}'
+  {% else %}
+    autofocus='autofocus'
+  {% endif %}
+    placeholder='Provide a wiki name...'
+  >
+</div>
+<div class='form-group'>
+  <h1>Flask-PageDown Demo</h1> {% if text or text2 %}
+  <div>
+    <p>Received text was:</p>
+    <pre>{{ text }}</pre>
+    <pre>{{ text2 }}</pre>
+  </div>
+</div>
+  <hr> {% endif %}
+
+  <div class="form-group">
+    <label>{{ form.pagedown.label }}</label>
+      {{ form.hidden_tag() }}
+
+      {{ form.pagedown(class_="form-control", rows=20) }}
+      {{ form.submit(class_="btn btn-success") }}
+  </div>
+</form>
+{% endblock %}

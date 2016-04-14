@@ -16,6 +16,18 @@ from markwiki.validators import is_valid_section, validate_page_path
 from markwiki.wiki import WikiPage
 from markwiki.wiki import WikiSection
 
+from flask_wtf import Form
+from wtforms.fields import SubmitField
+from flask_pagedown import PageDown
+from flask_pagedown.fields import PageDownField
+
+pagedown = PageDown(app)
+
+class PageDownFormExample(Form):
+    pagedown = PageDownField('Enter your markdown')
+    pagedown2 = PageDownField('Enter your markdown')
+    submit = SubmitField('Submit')
+
 
 def render_wiki_editor(page):
     '''Render the wiki editor with content from the provided wiki page.
@@ -23,6 +35,20 @@ def render_wiki_editor(page):
     try:
         return render_template('edit.html', page_path=page.page_path,
                                wiki_content=page.content)
+    except IOError:
+        abort(500)
+
+def render_wiki_editor_pagedown(page):
+    '''Render the wiki editor with content from the provided wiki page.
+    Assumes a valid wiki page.'''
+    form = PageDownFormExample()
+    form.pagedown.data = page.content
+    form.text = None
+    form.text2 = None
+
+    try:
+        return render_template('testing.html', page_path=page.page_path,
+                               wiki_content=page.content, form=form)
     except IOError:
         abort(500)
 
@@ -38,8 +64,10 @@ def index():
 @login_required
 def create(page_path=None, wiki_content=None):
     '''Display the wiki creation form.'''
+    pagedown = PageDownField('Enter your markdown')
+    form = PageDownFormExample()
     return render_template('create.html', page_path=page_path,
-                           wiki_content=wiki_content)
+                           wiki_content=wiki_content, form=form)
 
 
 @app.route('/make_wiki', methods=['POST'])
@@ -48,6 +76,33 @@ def make_wiki():
     '''Make the wiki page.'''
     page_path = request.form['page_path']
     content = request.form['wiki_content']
+    try:
+        validate_page_path(page_path)
+        page = WikiPage(page_path)
+
+        # Proceed if the wiki does not exist.
+        if not page.exists:
+            if not page.store(content):
+                # Storing would fail if something unrecoverable happened.
+                abort(500)
+
+            app.search_engine.add_wiki(page_path, content)
+
+            return redirect(url_for('wiki', page_path=page_path))
+        else:
+            flash('That wiki name already exists. Please choose another.')
+            return create(page_path, request.form['wiki_content'])
+    except ValidationError as verror:
+        flash(verror.message)
+        return create(page_path, request.form['wiki_content'])
+
+
+@app.route('/make_wiki_from_pagedown', methods=['POST'])
+@login_required
+def make_wiki_from_pagedown():
+    '''Make the wiki page.'''
+    page_path = request.form['page_path']
+    content = request.form['pagedown']
     try:
         validate_page_path(page_path)
         page = WikiPage(page_path)
@@ -94,6 +149,33 @@ def edit(page_path=None):
         # fingered something.
         flash(verror.message)
         return redirect(url_for('create', page_path=page_path))
+
+@app.route('/edit_with_markdown/')
+@app.route('/edit_with_markdown/<path:page_path>')
+@login_required
+def edit_with_markdown(page_path=None):
+    '''Edit a wiki page.'''
+    # It should be possible to create a new page from the edit link.
+    if page_path is None:
+        return redirect(url_for('create'))
+
+    try:
+        validate_page_path(page_path)
+        page = WikiPage(page_path)
+
+        # Proceed if the wiki exists.
+        if page.exists:
+            return render_wiki_editor_pagedown(page)
+        else:
+            # Get the user going with this new page.
+            return redirect(url_for('testing', page_path=page_path))
+    except ValidationError as verror:
+        # The user tried to create a page straight from the URL, but the path
+        # isn't correct. Give them the page path again in case they fat
+        # fingered something.
+        flash(verror.message)
+        return redirect(url_for('testing', page_path=page_path))
+
 
 
 @app.route('/update_wiki', methods=['POST'])
@@ -229,3 +311,22 @@ def revert(page_path, commit):
     else:
         flash('Sorry. That version doesn\'t exist.')
         return redirect(url_for('index'))
+
+
+@app.route('/testing', methods=['GET', 'POST'])
+def testing(page_path = None, commit = None):
+    form = PageDownFormExample()
+    text = None
+    text2 = None
+    if form.validate_on_submit():
+        text = form.pagedown.data
+        text2 = form.pagedown2.data
+    else:
+        form.pagedown.data = ('# This is demo #1 of Flask-PageDown\n'
+                              '**Markdown** is rendered on the fly in the '
+                              '<i>preview area below</i>!')
+        form.pagedown2.data = ('# This is demo #2 of Flask-PageDown\nThe '
+                               '*preview* is rendered separately from the '
+                               '*input*, and in this case it is located above.')
+
+    return render_template('testing.html', form=form, text=text, text2=text2, page_path=page_path)
